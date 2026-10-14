@@ -40,6 +40,7 @@
         .badge-success { background-color: #55efc4; color: #00b894; }
         .fine-text { color: #c0392b; font-weight: bold; background: #fadbd8; padding: 3px 6px; border-radius: 4px; display: inline-block; }
         .warning-text { color: #b7950b; font-weight: bold; background: #fcf3cf; padding: 3px 6px; border-radius: 4px; display: inline-block; }
+        .safe-text { color: #27ae60; font-weight: bold; background: #e8f8f5; padding: 3px 6px; border-radius: 4px; display: inline-block; }
 
         #admin-panel { display: none; background: white; padding: 15px; border-radius: 6px; box-shadow: 0 3px 10px rgba(0,0,0,0.15); margin-bottom: 15px; border-left: 4px solid #d35400; }
         #admin-panel h3 { margin-top: 0; color: #d35400; font-size: 15px; }
@@ -164,7 +165,7 @@
         { name: "Lê Khánh Đoan", dept: "Kiểm toán", appName: "Lê Khánh Đoan", km: 0, rank: 31 }
     ];
 
-    let membersData = JSON.parse(localStorage.getItem('beer_penalty_data_v5')) || defaultData;
+    let membersData = JSON.parse(localStorage.getItem('beer_penalty_data_v6')) || defaultData;
 
     function renderTable() {
         const tbody = document.getElementById('leaderboard-data');
@@ -174,7 +175,7 @@
         let penaltyCount = 0;
         const sortDirection = document.getElementById('sort-order').value;
 
-        // 1. Nhóm 0 km (hoặc chưa chạy): Đưa lên làm Top phạt nặng nhất (Hạng 1)
+        // 1. Nhóm 0 km: Đưa lên làm Top phạt nặng nhất (Hạng 1)
         let zeroKmRunners = membersData.filter(m => m.km === 0);
 
         // 2. Nhóm có chạy (> 0 km): Sắp xếp tăng dần theo số KM (ít km nhất xếp tiếp theo)
@@ -200,7 +201,7 @@
                     m.priorityOrder = 3;
                     penaltyCount++;
                 } else {
-                    m.fine = "-";
+                    m.fine = "";
                     m.priorityOrder = 99;
                 }
             });
@@ -219,13 +220,13 @@
                     m.priorityOrder = 3;
                     penaltyCount++;
                 } else {
-                    m.fine = "-";
+                    m.fine = "";
                     m.priorityOrder = 99;
                 }
             });
         }
 
-        // Đánh dấu cảnh báo Top 4 và Top 5 cho những người còn lại gần vùng nguy hiểm
+        // Đánh dấu cảnh báo Top 4, Top 5 và các hạng an toàn còn lại
         let unpunished = membersData.filter(m => m.priorityOrder === 99).sort((a, b) => a.km - b.km);
         unpunished.forEach((m, idx) => {
             if (idx === 0) {
@@ -235,7 +236,9 @@
                 m.warningType = "⚠️ Cảnh báo (Top 5)";
                 m.priorityOrder = 5;
             } else {
-                m.warningType = "";
+                // Xếp hạng an toàn tiếp theo (Hạng 6, 7, 8...)
+                let safeRankNumber = 6 + idx - 2; 
+                m.warningType = `✅ An toàn (Hạng ${safeRankNumber} từ dưới lên)`;
                 m.priorityOrder = 10 + idx;
             }
         });
@@ -268,10 +271,12 @@
 
             let appStatus = member.appName ? '<span class="badge badge-success">Đã mở App</span>' : '<span class="badge badge-danger">Chưa mở App</span>';
             let displayCol1 = "-";
-            if (member.fine && member.fine !== "-") {
+            if (member.fine && member.fine !== "") {
                 displayCol1 = `<span class="fine-text">${member.fine}</span>`;
-            } else if (member.warningType) {
+            } else if (member.warningType && member.warningType.includes("Nguy cơ") || member.warningType.includes("Cảnh báo")) {
                 displayCol1 = `<span class="warning-text">${member.warningType}</span>`;
+            } else if (member.warningType) {
+                displayCol1 = `<span class="safe-text">${member.warningType}</span>`;
             }
 
             tr.innerHTML = `
@@ -350,7 +355,7 @@
         });
 
         membersData = updatedList;
-        localStorage.setItem('beer_penalty_data_v5', JSON.stringify(membersData));
+        localStorage.setItem('beer_penalty_data_v6', JSON.stringify(membersData));
         alert("Đã lưu thay đổi thành công!");
         document.getElementById('admin-panel').style.display = 'none';
         renderTable();
@@ -394,7 +399,7 @@
             km: parseFloat(row['Số km'] || row['KM'] || 0),
             rank: row['thứ hạng'] || row['Thứ hạng'] || 'chưa có hạng'
         }));
-        localStorage.setItem('beer_penalty_data_v5', JSON.stringify(membersData));
+        localStorage.setItem('beer_penalty_data_v6', JSON.stringify(membersData));
         renderTable();
     }
 
