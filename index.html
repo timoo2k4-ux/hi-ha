@@ -164,7 +164,7 @@
         { name: "Lê Khánh Đoan", dept: "Kiểm toán", appName: "Lê Khánh Đoan", km: 0, rank: 31 }
     ];
 
-    let membersData = JSON.parse(localStorage.getItem('beer_penalty_data_v4')) || defaultData;
+    let membersData = JSON.parse(localStorage.getItem('beer_penalty_data_v5')) || defaultData;
 
     function renderTable() {
         const tbody = document.getElementById('leaderboard-data');
@@ -180,27 +180,16 @@
         // 2. Nhóm có chạy (> 0 km): Sắp xếp tăng dần theo số KM (ít km nhất xếp tiếp theo)
         let activeRunners = membersData.filter(m => m.km > 0).sort((a, b) => a.km - b.km);
 
-        // Lấy danh sách các mức KM độc lập từ nhóm có chạy để gán phạt hạng 1, 2, 3 từ dưới lên (nếu nhóm 0km không tính vào hoặc tính chung tùy logic)
         let uniqueKms = [...new Set(activeRunners.map(m => m.km))];
-        
-        // Nếu có người 0km, người 0km sẽ ăn phạt nặng nhất (Hạng 1 từ dưới lên)
-        // Sau đó các mức km tiếp theo tăng dần sẽ nhận hạng tiếp theo.
         let minKm1 = uniqueKms.length > 0 ? uniqueKms[0] : -1;
         let minKm2 = uniqueKms.length > 1 ? uniqueKms[1] : -1;
 
-        // Xây dựng danh sách thứ tự ưu tiên phạt:
-        // Nếu có người 0km -> Người 0km giữ priorityOrder = 1 (Phạt 12 lon)
-        // Tiếp theo activeRunners[0] (nếu không có 0km) hoặc activeRunners giữ các mức tiếp theo.
-        
-        let allRankedList = [];
         if (zeroKmRunners.length > 0) {
-            // Tất cả người 0km đồng hạng 1 (phạt nặng nhất)
             zeroKmRunners.forEach(m => {
                 m.fine = "🍺 12 lon bia (0 KM - Hạng 1)";
                 m.priorityOrder = 1;
                 penaltyCount++;
             });
-            // Người chạy ít km nhất tiếp theo sẽ chịu phạt hạng 2
             activeRunners.forEach(m => {
                 if (m.km === minKm1) {
                     m.fine = "🍺 6 lon bia (Hạng 2 từ dưới lên)";
@@ -216,7 +205,6 @@
                 }
             });
         } else {
-            // Không có ai 0km thì áp dụng chuẩn cho nhóm chạy thấp nhất
             activeRunners.forEach((m, idx) => {
                 if (idx === 0 || m.km === minKm1) {
                     m.fine = "🍺 12 lon bia (Hạng 1 từ dưới lên)";
@@ -327,3 +315,90 @@
                     <input type="text" placeholder="Hạng" id="rank_${idx}" value="${m.rank}" style="flex: 1;">
                     <button type="button" class="btn btn-red" onclick="removeMemberRow(${idx})">❌</button>
                 </div>
+            `;
+        });
+    }
+
+    function addNewMemberRow() {
+        membersData.push({ name: "Thành viên mới", dept: "Kiểm toán", appName: "", km: 0, rank: "chưa có hạng" });
+        loadAdminForm();
+    }
+
+    function removeMemberRow(idx) {
+        membersData.splice(idx, 1);
+        loadAdminForm();
+    }
+
+    function saveManualData() {
+        const rows = document.querySelectorAll('.form-row');
+        let updatedList = [];
+        
+        rows.forEach((row, idx) => {
+            const name = document.getElementById(`name_${idx}`).value;
+            const appName = document.getElementById(`app_${idx}`).value;
+            const currentKm = membersData[idx] ? membersData[idx].km : 0;
+            const addKmVal = parseFloat(document.getElementById(`add_km_${idx}`).value) || 0;
+            const rank = document.getElementById(`rank_${idx}`).value;
+
+            updatedList.push({
+                name: name,
+                dept: "Kiểm toán",
+                appName: appName,
+                km: currentKm + addKmVal,
+                rank: rank
+            });
+        });
+
+        membersData = updatedList;
+        localStorage.setItem('beer_penalty_data_v5', JSON.stringify(membersData));
+        alert("Đã lưu thay đổi thành công!");
+        document.getElementById('admin-panel').style.display = 'none';
+        renderTable();
+    }
+
+    function uploadExcel(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+            parseAndSaveData(rawJson);
+            alert("Nhập file Excel thành công!");
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function syncGoogleSheet() {
+        const url = document.getElementById('gsheet-url').value.trim();
+        if (!url) { alert("Vui lòng nhập link CSV!"); return; }
+        fetch(url)
+            .then(res => res.text())
+            .then(csvText => {
+                const workbook = XLSX.read(csvText, { type: 'string' });
+                const sheetName = workbook.SheetNames[0];
+                const rawJson = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                parseAndSaveData(rawJson);
+                alert("Đồng bộ Google Sheet thành công!");
+            })
+            .catch(err => alert("Lỗi tải Google Sheet!"));
+    }
+
+    function parseAndSaveData(jsonList) {
+        membersData = jsonList.map(row => ({
+            name: row['Tên'] || row['Name'] || '',
+            dept: row['Phòng ban'] || row['Department'] || 'Kiểm toán',
+            appName: row['Tên trong app'] || row['App Name'] || '',
+            km: parseFloat(row['Số km'] || row['KM'] || 0),
+            rank: row['thứ hạng'] || row['Thứ hạng'] || 'chưa có hạng'
+        }));
+        localStorage.setItem('beer_penalty_data_v5', JSON.stringify(membersData));
+        renderTable();
+    }
+
+    renderTable();
+</script>
+</body>
+</html>
